@@ -36,21 +36,24 @@ app.use(helmet({
         }
     }
 }));
-
-const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5000")
-    .split(",")
-    .map(origin => origin.trim());
+const allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:5000",
+    process.env.CLIENT_URL
+];
 
 app.use(cors({
     origin: (origin, callback) => {
+        console.log("Request Origin:", origin);
+
         if (!origin || allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
+
         return callback(new Error("Origin not allowed by CORS"));
     },
     credentials: true
 }));
-
 app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 300,
