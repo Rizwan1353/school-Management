@@ -15,45 +15,113 @@ const connectDB = require("./config/db");
 
 const app = express();
 
+// Hide Express information
 app.disable("x-powered-by");
 
-if (process.env.TRUST_PROXY === "true") {
+// Trust Render proxy
+if (
+    process.env.TRUST_PROXY === "true" ||
+    process.env.NODE_ENV === "production"
+) {
     app.set("trust proxy", 1);
 }
 
-app.use(helmet({
-    crossOriginResourcePolicy: { policy: "same-site" },
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
-            styleSrc: ["'self'"],
-            imgSrc: ["'self'", "data:"],
-            connectSrc: ["'self'"],
-            objectSrc: ["'none'"],
-            baseUri: ["'self'"],
-            frameAncestors: ["'none'"]
-        }
-    }
-}));
-const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5000",
-    process.env.CLIENT_URL
-];
+// Allowed frontend origins
+const allowedOrigins = new Set(
+    [
+        "https://school-management-1-vdyn.onrender.com",
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "http://localhost:5173",
+        process.env.CLIENT_URL
+    ]
+        .filter(Boolean)
+        .map(origin => origin.trim().replace(/\/$/, ""))
+);
 
+// CORS configuration
 app.use(cors({
     origin: (origin, callback) => {
         console.log("Request Origin:", origin);
 
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Allow requests without Origin header
+        if (!origin) {
             return callback(null, true);
         }
 
+        const normalizedOrigin = origin
+            .trim()
+            .replace(/\/$/, "");
+
+        if (allowedOrigins.has(normalizedOrigin)) {
+            return callback(null, true);
+        }
+
+        console.log("Blocked Origin:", normalizedOrigin);
+
         return callback(new Error("Origin not allowed by CORS"));
     },
-    credentials: true
+
+    credentials: true,
+
+    methods: [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS"
+    ],
+
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization"
+    ],
+
+    optionsSuccessStatus: 204
 }));
+
+// Security headers
+app.use(helmet({
+    crossOriginResourcePolicy: {
+        policy: "same-site"
+    },
+
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+
+            scriptSrc: ["'self'"],
+
+            styleSrc: ["'self'"],
+
+            imgSrc: [
+                "'self'",
+                "data:",
+                "blob:"
+            ],
+
+            connectSrc: [
+                "'self'",
+                "https://school-management-1-vdyn.onrender.com",
+                "http://localhost:3000",
+                "http://localhost:5000",
+                "http://localhost:5173",
+                ...(process.env.CLIENT_URL
+                    ? [process.env.CLIENT_URL]
+                    : [])
+            ],
+
+            objectSrc: ["'none'"],
+
+            baseUri: ["'self'"],
+
+            frameAncestors: ["'none'"]
+        }
+    }
+}));
+
+// Rate limiting
 app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 300,
@@ -61,113 +129,139 @@ app.use(rateLimit({
     legacyHeaders: false
 }));
 
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+// Body parsers
+app.use(express.json({
+    limit: "1mb"
+}));
+
+app.use(express.urlencoded({
+    extended: false,
+    limit: "1mb"
+}));
+
 app.use(cookieParser());
+
+// MongoDB sanitization
 app.use(mongoSanitize());
 
+// Development logging
 if (process.env.NODE_ENV !== "production") {
     app.use(morgan("dev"));
 }
 
-// Load existing Mongoose models.
+// Load existing Mongoose models
 require("./school-management/models");
 
-// Serve the actual frontend folder.
+// Serve frontend files
 app.use(express.static(
     path.join(__dirname, "school-management", "public"),
-    { index: "index.html", dotfiles: "deny" }
+    {
+        index: "index.html",
+        dotfiles: "deny"
+    }
 ));
 
-// Authentication routes.
+// Authentication routes
 app.use(
     "/api/auth",
     require("./school-management/routes/authRoutes")
 );
 
-    // Admin dashboard routes.
+// Admin dashboard routes
 app.use(
     "/api/dashboard",
     require("./school-management/routes/dashboardRoutes")
 );
 
-   // Student management routes.
+// Student management routes
 app.use(
     "/api/students",
     require("./school-management/routes/studentRoutes")
 );
 
-  // Teacher management routes.
+// Teacher management routes
 app.use(
     "/api/teachers",
     require("./school-management/routes/teacherRoutes")
 );
-    // Subject management routes.
+
+// Subject management routes
 app.use(
     "/api/subjects",
-     require("./school-management/routes/subjectRoutes"));
-     
-    //attendance management routes.
+    require("./school-management/routes/subjectRoutes")
+);
+
+// Attendance management routes
 app.use(
     "/api/attendance",
-     require("./school-management/routes/attendanceRoutes"));
+    require("./school-management/routes/attendanceRoutes")
+);
 
-      // Submission management routes.
-
+// Submission management routes
 app.use(
     "/api/submissions",
-     require("./school-management/routes/submissionRoutes"));
+    require("./school-management/routes/submissionRoutes")
+);
 
-     // Assignment management routes.
+// Assignment management routes
 app.use(
     "/api/assignments",
-     require("./school-management/routes/assignmentRoutes"));
+    require("./school-management/routes/assignmentRoutes")
+);
 
-
-
-
-    // Class management routes.
+// Class management routes
 app.use(
     "/api/classes",
     require("./school-management/routes/classRoutes")
 );
 
-
-
-    // assessments management routes
+// Assessment management routes
 app.use(
     "/api/assessments",
-     require("./school-management/routes/assessmentRoutes"));
+    require("./school-management/routes/assessmentRoutes")
+);
 
-    // Notice management routes.
+// Notice management routes
 app.use(
     "/api/notices",
-     require("./school-management/routes/noticeRoutes"));
+    require("./school-management/routes/noticeRoutes")
+);
 
+// School settings assets
 app.use(
     "/school-assets",
     express.static(
-        path.join(__dirname, "school-management", "uploads", "settings")
+        path.join(
+            __dirname,
+            "school-management",
+            "uploads",
+            "settings"
+        )
     )
 );
 
-      // Settings management routes.
+// Settings management routes
 app.use(
     "/api/settings",
-     require("./school-management/routes/settingsRoutes"));
+    require("./school-management/routes/settingsRoutes")
+);
 
-
+// API health check
 app.get("/api/health", (req, res) => {
     res.status(200).json({
         success: true,
+
         message: "School Management API is running.",
+
         database: mongoose.connection.readyState === 1
             ? "connected"
             : "disconnected",
+
         environment: process.env.NODE_ENV || "development"
     });
 });
 
+// API welcome route
 app.get("/api", (req, res) => {
     res.json({
         success: true,
@@ -176,6 +270,7 @@ app.get("/api", (req, res) => {
     });
 });
 
+// 404 handler
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -183,18 +278,23 @@ app.use((req, res) => {
     });
 });
 
+// Global error handler
 app.use((err, req, res, next) => {
-    console.error(err);
+    console.error("Application Error:", err);
+
     res.status(err.statusCode || 500).json({
         success: false,
+
         message: err.statusCode
             ? err.message
             : "Internal server error."
     });
 });
 
+// Render port configuration
 const PORT = process.env.PORT || 5000;
 
+// Start server
 async function startServer() {
     try {
         await connectDB();
@@ -202,16 +302,24 @@ async function startServer() {
         app.listen(PORT, () => {
             console.log("----------------------------------");
             console.log("School Management System Started");
-            console.log(`URL: ${process.env.APP_URL || `http://localhost:${PORT}`}`);
+            console.log(
+                `URL: ${process.env.APP_URL || `http://localhost:${PORT}`}`
+            );
             console.log(`Port: ${PORT}`);
             console.log("----------------------------------");
         });
+
     } catch (error) {
-        console.error("Server startup failed:", error.message);
+        console.error(
+            "Server startup failed:",
+            error.message
+        );
+
         process.exit(1);
     }
 }
 
+// Start only when executed directly
 if (require.main === module) {
     startServer();
 }
